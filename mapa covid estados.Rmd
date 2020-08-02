@@ -1,0 +1,699 @@
+---
+title: "Covid-19: Brasil"
+author: "Vinícius Barbosa Godinho"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+    social: menu
+    
+---
+
+```{r setup, include=FALSE}
+
+
+con <- gzcon(url(paste("https://data.brasil.io/dataset/covid19/caso_full.csv.gz", sep=",")))
+txt <- readLines(con)
+dados <- read.csv(textConnection(txt))
+
+
+library("dplyr")
+library("tidyr")
+library("lubridate")
+library("ggplot2")
+require('tikzDevice')
+library("devtools")
+library(plotly)
+library("flexdashboard")
+library("sf")  
+library("tmap")
+library("tmaptools")
+library("rgdal")
+library("leaflet")
+
+
+
+
+
+colnames(dados)[8] <-'confirmed'
+colnames(dados)[12] <-'deaths'
+colnames(dados)[9] <- 'confirmed_per_100k'
+
+
+
+
+###Brasil
+
+
+dados_brasil_total <- dados %>%
+  filter(place_type=="state") %>%
+  arrange(date) %>%
+  mutate(deaths_per_100k= (100000*deaths)/estimated_population_2019) 
+
+
+
+
+dados_brasil <- group_by(dados_brasil_total,date)%>%summarise(confirmed=sum(confirmed), deaths=sum(deaths),new_confirmed=sum(new_confirmed), new_deaths=sum(new_deaths),confirmed_per_100k=sum(confirmed_per_100k), deaths_per_100k=sum(deaths_per_100k))
+
+
+
+dados_brasil$date <- as.Date(dados_brasil$date)
+
+
+dados_brasil <- dados_brasil%>%
+  mutate(ma7_confirmed = stats::filter(dados_brasil$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_brasil$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+
+
+##gráficos
+###Acumulado
+
+brasil_casos_total <- data.frame(casos=c(rep("Confirmados",nrow(dados_brasil)),rep("Obitos",nrow(dados_brasil))), data = rep(dados_brasil$date,2), total = c(dados_brasil$confirmed,dados_brasil$deaths))
+
+
+
+####Log acumulados
+
+
+brasil_casos_log <- data.frame(casos=c(rep("Confirmados",nrow(dados_brasil)),rep("Obitos",nrow(dados_brasil))), data = rep(dados_brasil$date,2), total = c(log(dados_brasil$confirmed),log(dados_brasil$deaths)))
+
+
+
+###Por 100 mil habitante
+
+brasil_casos_per_100k <- data.frame(casos=c(rep("Confirmados",nrow(dados_brasil)),rep("Obitos",nrow(dados_brasil))), data = rep(dados_brasil$date,2), total = c(dados_brasil$confirmed_per_100k,dados_brasil$deaths_per_100k))
+
+
+###média móvel 7 dias
+
+####casos
+
+dados_brasil$ma7_confirmed <- as.numeric(dados_brasil$ma7_confirmed)
+
+
+##óbitos
+
+dados_brasil$ma7_deaths <- as.numeric(dados_brasil$ma7_deaths)
+
+
+
+
+
+###Centro Oeste
+#DF, GO, MT, MS
+
+dados_co <- dados %>%
+  filter(place_type == "state", state=="DF" |state=="GO" |state=="MT" |state=="MS") %>%
+  arrange(date) %>%
+  mutate(deaths_per_100k= (100000*deaths)/estimated_population_2019) 
+
+
+
+dados_co$date <- as.Date(dados_co$date)
+
+
+###Média móvel
+#df
+dados_df <- dados %>%
+  filter(place_type=="state", state =="DF") 
+
+
+dados_df <- dados_df%>%
+  mutate(ma7_confirmed = stats::filter(dados_df$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_df$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+
+
+#goias
+dados_go <- dados %>%
+  filter(place_type=="state", state =="GO") 
+
+
+dados_go <- dados_go%>%
+  mutate(ma7_confirmed = stats::filter(dados_go$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_go$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+#mt
+dados_mt <- dados %>%
+  filter(place_type=="state", state =="MT") 
+
+
+dados_mt <- dados_mt%>%
+  mutate(ma7_confirmed = stats::filter(dados_mt$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_mt$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+
+#ms
+
+
+dados_ms <- dados %>%
+  filter(place_type=="state", state =="MS") 
+
+
+dados_ms <- dados_ms%>%
+  mutate(ma7_confirmed = stats::filter(dados_ms$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_ms$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+
+
+
+dados_co_full<- rbind.data.frame(dados_df,dados_go,dados_mt,dados_ms)
+
+dados_co_full$date <- as.Date(dados_co_full$date)
+
+
+
+
+###Sudeste
+#ES, MG, RJ, SP
+
+dados_sd <- dados %>%
+  filter(place_type == "state", state=="ES" |state=="MG" |state=="RJ" |state=="SP") %>%
+  arrange(date) %>%
+  mutate(deaths_per_100k= (100000*deaths)/estimated_population_2019) 
+
+
+
+dados_sd$date <- as.Date(dados_sd$date)
+
+
+###Média móvel
+#ES
+dados_es <- dados %>%
+  filter(place_type=="state", state =="ES") 
+
+
+dados_es <- dados_es%>%
+  mutate(ma7_confirmed = stats::filter(dados_es$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_es$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+
+
+#mg
+dados_mg <- dados %>%
+  filter(place_type=="state", state =="MG") 
+
+
+dados_mg <- dados_mg%>%
+  mutate(ma7_confirmed = stats::filter(dados_mg$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_mg$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+#rj
+dados_rj <- dados %>%
+  filter(place_type=="state", state =="RJ") 
+
+
+dados_rj <- dados_rj%>%
+  mutate(ma7_confirmed = stats::filter(dados_rj$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_rj$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+
+#sp
+
+
+dados_sp <- dados %>%
+  filter(place_type=="state", state =="SP") 
+
+
+dados_sp <- dados_sp%>%
+  mutate(ma7_confirmed = stats::filter(dados_sp$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_sp$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+
+
+
+dados_sd_full<- rbind.data.frame(dados_es,dados_mg,dados_rj,dados_sp)
+
+dados_sd_full$date <- as.Date(dados_sd_full$date)
+
+
+
+
+
+###Sul
+#PR, RS, SC
+
+dados_su <- dados %>%
+  filter(place_type == "state", state=="PR" |state=="RS" |state=="SC") %>%
+  arrange(date) %>%
+  mutate(deaths_per_100k= (100000*deaths)/estimated_population_2019) 
+
+
+
+dados_su$date <- as.Date(dados_su$date)
+
+
+###Média móvel
+#PR
+dados_pr <- dados %>%
+  filter(place_type=="state", state =="PR") 
+
+
+dados_pr <- dados_pr%>%
+  mutate(ma7_confirmed = stats::filter(dados_pr$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_pr$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+
+
+#mg
+dados_rs <- dados %>%
+  filter(place_type=="state", state =="RS") 
+
+
+dados_rs <- dados_rs%>%
+  mutate(ma7_confirmed = stats::filter(dados_rs$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_rs$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+#SC
+dados_sc <- dados %>%
+  filter(place_type=="state", state =="SC") 
+
+
+dados_sc <- dados_sc%>%
+  mutate(ma7_confirmed = stats::filter(dados_sc$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_sc$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+
+
+dados_su_full<- rbind.data.frame(dados_pr,dados_rs,dados_sc)
+
+dados_su_full$date <- as.Date(dados_su_full$date)
+
+
+###Nordeste
+
+###Sul
+#AL,BA,CE,PB,PI,PE,MA,RN,SE
+
+dados_ne <- dados %>%
+  filter(place_type == "state", state=="AL" |state=="BA" |state=="CE"|state=="PB"|state=="PE"|state=="PI"|state=="MA"|state=="RN"|state=="SE") %>%
+  arrange(date) %>%
+  mutate(deaths_per_100k= (100000*deaths)/estimated_population_2019) 
+
+
+
+dados_ne$date <- as.Date(dados_ne$date)
+
+
+###Média móvel
+#AL
+dados_al <- dados %>%
+  filter(place_type=="state", state =="AL") 
+
+
+dados_al <- dados_al%>%
+  mutate(ma7_confirmed = stats::filter(dados_al$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_al$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+
+
+#ba
+dados_ba <- dados %>%
+  filter(place_type=="state", state =="BA") 
+
+
+dados_ba <- dados_ba%>%
+  mutate(ma7_confirmed = stats::filter(dados_ba$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_ba$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+#CE
+dados_ce <- dados %>%
+  filter(place_type=="state", state =="CE") 
+
+
+dados_ce <- dados_ce%>%
+  mutate(ma7_confirmed = stats::filter(dados_ce$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_ce$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+
+#PB
+dados_pb <- dados %>%
+  filter(place_type=="state", state =="PB") 
+
+
+dados_pb <- dados_pb%>%
+  mutate(ma7_confirmed = stats::filter(dados_pb$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_pb$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+#PE
+dados_pe <- dados %>%
+  filter(place_type=="state", state =="PE") 
+
+
+dados_pe <- dados_pe%>%
+  mutate(ma7_confirmed = stats::filter(dados_pe$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_pe$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+#PI
+dados_pi <- dados %>%
+  filter(place_type=="state", state =="PI") 
+
+
+dados_pi <- dados_pi%>%
+  mutate(ma7_confirmed = stats::filter(dados_pi$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_pi$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+#MA
+dados_ma <- dados %>%
+  filter(place_type=="state", state =="MA") 
+
+
+dados_ma <- dados_ma%>%
+  mutate(ma7_confirmed = stats::filter(dados_ma$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_ma$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+#RN
+dados_rn <- dados %>%
+  filter(place_type=="state", state =="RN") 
+
+
+dados_rn <- dados_rn%>%
+  mutate(ma7_confirmed = stats::filter(dados_rn$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_rn$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+#SE
+dados_se <- dados %>%
+  filter(place_type=="state", state =="SE") 
+
+
+dados_se <- dados_se%>%
+  mutate(ma7_confirmed = stats::filter(dados_se$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_se$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+
+
+
+dados_ne_full<- rbind.data.frame(dados_al,dados_ba,dados_ce,dados_pb,dados_pe,dados_pi,dados_ma,dados_rn,dados_se)
+
+dados_ne_full$date <- as.Date(dados_ne_full$date)
+
+
+
+
+###Norte
+
+
+#Acre, Amapá, Amazonas, Pará, Rondônia, Roraima e Tocantins
+
+
+dados_no <- dados %>%
+  filter(place_type == "state", state=="AC" |state=="AP" |state=="AM"|state=="PA"|state=="RO"|state=="RR"|state=="TO") %>%
+  arrange(date) %>%
+  mutate(deaths_per_100k= (100000*deaths)/estimated_population_2019) 
+
+
+
+dados_no$date <- as.Date(dados_no$date)
+
+
+
+###Média móvel
+#AC
+dados_ac <- dados %>%
+  filter(place_type=="state", state =="AC") 
+
+
+dados_ac <- dados_ac%>%
+  mutate(ma7_confirmed = stats::filter(dados_ac$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_ac$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+
+
+#ap
+dados_ap <- dados %>%
+  filter(place_type=="state", state =="AP") 
+
+
+dados_ap <- dados_ap%>%
+  mutate(ma7_confirmed = stats::filter(dados_ap$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_ap$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+#AM
+dados_am <- dados %>%
+  filter(place_type=="state", state =="AM") 
+
+
+dados_am <- dados_am%>%
+  mutate(ma7_confirmed = stats::filter(dados_am$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_am$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+
+#PA
+dados_pa <- dados %>%
+  filter(place_type=="state", state =="PA") 
+
+
+dados_pa <- dados_pa%>%
+  mutate(ma7_confirmed = stats::filter(dados_pa$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_pa$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+#PE
+dados_ro <- dados %>%
+  filter(place_type=="state", state =="RO") 
+
+
+dados_ro <- dados_ro%>%
+  mutate(ma7_confirmed = stats::filter(dados_ro$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_ro$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+#RR
+dados_rr <- dados %>%
+  filter(place_type=="state", state =="RR") 
+
+
+dados_rr <- dados_rr%>%
+  mutate(ma7_confirmed = stats::filter(dados_rr$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_rr$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+#TO
+dados_to <- dados %>%
+  filter(place_type=="state", state =="TO") 
+
+
+dados_to <- dados_to%>%
+  mutate(ma7_confirmed = stats::filter(dados_to$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(dados_to$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F))
+
+
+dados_no_full<- rbind.data.frame(dados_ac,dados_ap,dados_am,dados_pa,dados_ro,dados_rr,dados_to)
+
+dados_no_full$date <- as.Date(dados_no_full$date)
+
+
+
+
+dados_full<- rbind.data.frame(dados_sd_full,dados_su_full,dados_co_full,dados_no_full,dados_ne_full)
+
+dados_full$date <- as.Date(dados_full$date)
+
+
+
+
+
+dados_full <- dados_full 
+###Agrupar regiões
+
+
+##Brasil
+
+df_brasil <- dados_brasil %>%
+  mutate(state= "Brasil") %>%
+  select(date,confirmed,deaths,new_confirmed,new_deaths,ma7_confirmed,ma7_deaths,state)
+
+
+##Centro-Oeste
+
+df_co <- group_by(dados_co_full,date)%>%
+summarise(confirmed=sum(confirmed), deaths=sum(deaths),new_confirmed=sum(new_confirmed), new_deaths=sum(new_deaths))
+
+df_co <- df_co%>%
+  mutate(ma7_confirmed = stats::filter(df_co$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(df_co$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(state= "Centro-Oeste")
+
+##Nordeste
+
+df_ne <- group_by(dados_ne_full,date)%>%
+  summarise(confirmed=sum(confirmed), deaths=sum(deaths),new_confirmed=sum(new_confirmed), new_deaths=sum(new_deaths))
+
+df_ne <- df_ne%>%
+  mutate(ma7_confirmed = stats::filter(df_ne$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(df_ne$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(state= "Nordeste")
+
+
+
+##Norte
+
+df_no <- group_by(dados_no_full,date)%>%
+  summarise(confirmed=sum(confirmed), deaths=sum(deaths),new_confirmed=sum(new_confirmed), new_deaths=sum(new_deaths))
+
+df_no <- df_no%>%
+  mutate(ma7_confirmed = stats::filter(df_no$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(df_no$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(state= "Norte")
+
+
+##Sudeste
+
+df_sd <- group_by(dados_sd_full,date)%>%
+  summarise(confirmed=sum(confirmed), deaths=sum(deaths),new_confirmed=sum(new_confirmed), new_deaths=sum(new_deaths))
+
+df_sd <- df_sd%>%
+  mutate(ma7_confirmed = stats::filter(df_sd$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(df_sd$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(state= "Sudeste")
+
+##Sul
+
+df_su <- group_by(dados_su_full,date)%>%
+  summarise(confirmed=sum(confirmed), deaths=sum(deaths),new_confirmed=sum(new_confirmed), new_deaths=sum(new_deaths))
+
+df_su <- df_su%>%
+  mutate(ma7_confirmed = stats::filter(df_su$new_confirmed, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(ma7_deaths = stats::filter(df_su$new_deaths, filter=rep(1/7, 7), method="convolution", sides=1, circular=F)) %>%
+  mutate(state= "Sul")
+
+
+
+df_full_regiao<- rbind.data.frame(df_co,df_ne,df_no,df_sd,df_su)
+
+
+df_full_regiao <- df_full_regiao 
+
+
+map_br_est <- read_sf("E:/Covid-19/municipios/br_unidades_da_federacao/BRUFE250GC_SIR.shp")
+
+
+
+
+
+
+
+
+df_map_estados <- dados_full %>%
+  group_by(state) 
+
+df_map_estados <- df_map_estados %>%
+    summarize(last(confirmed),last(new_confirmed),
+            last(deaths),last(new_deaths),
+            round(sum(new_deaths)/sum(new_confirmed)*100,digits = 2))
+
+
+
+
+df_map_estados <- as.data.frame(df_map_estados)
+
+
+
+colnames(df_map_estados)[1] <- "NM_ESTADO"
+
+
+map_br_est$NM_ESTADO <-c("AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG",
+                     "PA", "PB", "PR", "PE", "PI",  "RJ", "RN","RS", "RO", "RR","SC", "SP","SE", "TO")
+
+
+
+
+#Une a base de dados da planilha com o mapa pelo nome do município
+
+
+#br_est=merge (br_est,df_map_estados,by="NM_ESTADO", all.x=T) 
+
+
+br_est <- inner_join(map_br_est,df_map_estados,by="NM_ESTADO")
+
+
+
+names(br_est)
+
+colnames(br_est)[1] <- "Estado"
+colnames(br_est)[5] <- "Confirmados"
+colnames(br_est)[6] <- "Novos Confirmados"
+colnames(br_est)[7] <- "Obitos"
+colnames(br_est)[8] <- "Novos Obitos"
+colnames(br_est)[9] <- "Taxa Letalidade"
+
+br_est <- br_est[-2]
+br_est <- br_est[-2]
+
+
+
+
+mapa_geral <- br_est
+mapa_confirmados <- br_est
+mapa_obitos <- br_est
+
+
+
+```
+
+Brasil
+=======================================================================
+
+
+Row
+-------------------------------------
+
+### Última Atualização
+
+```{r}
+valueBox(format(today(), "%d/%m/%Y"),
+         color = "gray")
+```
+
+
+### Total de Casos
+
+```{r}
+valueBox(max(df_brasil$confirmed))
+```
+
+### Novos Casos
+
+```{r}
+valueBox(df_brasil$new_confirmed[nrow(df_brasil)])
+```
+
+### Total de Óbitos
+
+```{r}
+valueBox(max(df_brasil$deaths),
+         color = "red")
+
+```
+
+### Novos Óbitos
+
+```{r}
+valueBox(df_brasil$new_deaths[nrow(df_brasil)],
+         color = "red")
+```
+
+### Taxa de Letalidade (%)
+
+```{r}
+valueBox(gsub('\\.',',',round((max(df_brasil$deaths)/max(df_brasil$confirmed))*100,
+         digits = 2)),
+         color = "gray")
+```
+
+
+Row
+-------------------------------------
+
+### Clique nos estados para ver as informações. Dados: Secretarias Estaduais de Saúde. Disponibilizado: https://data.brasil.io/.
+
+```{r}
+
+
+
+tmap_mode("view")
+
+
+tm_shape(mapa_geral) +
+  tm_polygons()+
+  tm_text("Estado", size = 1/2)
+
+
+
+
+
+
+```
+
