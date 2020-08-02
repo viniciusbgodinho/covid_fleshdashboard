@@ -1,0 +1,152 @@
+---
+title: "Covid-19: Brasil"
+author: "Vinícius Barbosa Godinho"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+    social: menu
+    
+---
+
+```{r setup, include=FALSE}
+
+
+con <- gzcon(url(paste("https://data.brasil.io/dataset/covid19/caso_full.csv.gz", sep=",")))
+txt <- readLines(con)
+dados <- read.csv(textConnection(txt))
+
+
+
+library("dplyr")
+library("tidyr")
+library("lubridate")
+library("ggplot2")
+require('tikzDevice')
+library("devtools")
+library(plotly)
+library("flexdashboard")
+library("sf")  
+library("tmap")
+library("tmaptools")
+library("rgdal")
+library("leaflet")
+
+
+colnames(dados)[8] <-'confirmed'
+colnames(dados)[12] <-'deaths'
+colnames(dados)[9] <- 'confirmed_per_100k'
+
+
+
+
+###Brasil
+
+
+dados_brasil <- dados %>%
+  filter(place_type=="city") %>%
+  arrange(date) %>%
+  mutate(round(deaths/confirmed*100,digits = 2)) 
+
+names(dados_brasil)
+
+colnames(dados_brasil)[18] <- "tx_letalidade"
+
+dados_brasil <- dados_brasil %>%
+          select(city,city_ibge_code,date,
+                 confirmed,new_confirmed,deaths,new_deaths,tx_letalidade)
+
+
+str(dados_brasil)
+
+
+dados_brasil$date <- as.Date(dados_brasil$date)
+
+
+map_br_municipios <- read_sf("E:/Covid-19/municipios/br_municipios/BRMUE250GC_SIR.shp")
+
+
+
+
+
+df_map_municipios <- dados_brasil %>%
+  group_by(city_ibge_code) 
+
+df_map_municipios <- df_map_municipios %>%
+  summarize(last(confirmed),last(new_confirmed),
+            last(deaths),last(new_deaths),
+            round(sum(new_deaths)/sum(new_confirmed)*100,digits = 2))
+
+
+
+
+
+df_map_municipios <- as.data.frame(df_map_municipios)
+
+
+
+names(df_map_municipios) 
+names(map_br_municipios) 
+
+
+colnames(df_map_municipios)[1]<-"CD_GEOCMU"
+
+
+str(df_map_municipios)
+str(map_br_municipios) 
+
+
+df_map_municipios$CD_GEOCMU <- as.character(df_map_municipios$CD_GEOCMU)
+
+#Une a base de dados da planilha com o mapa pelo nome do município
+
+
+#br_est=merge (br_est,df_map_estados,by="NM_ESTADO", all.x=T) 
+
+
+br_mun <- inner_join(map_br_municipios,df_map_municipios,by="CD_GEOCMU")
+
+
+
+names(br_mun)
+
+colnames(br_mun)[1] <- "Municipio"
+colnames(br_mun)[4] <- "Confirmados"
+colnames(br_mun)[5] <- "Novos Confirmados"
+colnames(br_mun)[6] <- "Obitos"
+colnames(br_mun)[7] <- "Novos Obitos"
+colnames(br_mun)[8] <- "Taxa Letalidade"
+
+br_mun <- br_mun[-2]
+
+
+
+
+
+
+```
+
+Brasil - Municípios
+=======================================================================
+
+
+Row
+-------------------------------------
+
+### Clique nos estados para ver as informações. Dados:Secretarias Estaduais de Saúde. Disponibilizado: https://data.brasil.io/.
+
+```{r}
+
+
+
+tmap_mode("view")
+
+
+
+tm_shape(br_mun) +
+  tm_sf()
+
+
+
+```
+
